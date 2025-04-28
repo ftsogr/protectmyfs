@@ -1,16 +1,9 @@
 # protectmyfs
 Protectmyfs is a shell script for easy fsprotect configuration from recovery mode (single kernel parameter) of grub 2 menu.
 
- ____            _            _   __  __       _____ ____  
-|  _ \ _ __ ___ | |_ ___  ___| |_|  \/  |_   _|  ___/ ___| 
-| |_) | '__/ _ \| __/ _ \/ __| __| |\/| | | | | |_  \___ \ 
-|  __/| | | (_) | ||  __/ (__| |_| |  | | |_| |  _|  ___) |
-|_|   |_|  \___/ \__\___|\___|\__|_|  |_|\__, |_|   |____/ 
-                                         |___/             
 
  
 --About:
- Protectmyfs is a shell script for easy fsprotect configuration from recovery mode (single kernel parameter) of grub 2 menu.
  When you enable the file system protection...
  Filesystems will be protected and no change is ever written to the disk.
  All changes will be written to the virtual memory and will be lost after the system reboot.
