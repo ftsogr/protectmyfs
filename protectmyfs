@@ -1,0 +1,535 @@
+#!/bin/bash
+################################################################################################################
+# Protectmyfs Version 1.0 (shell script for easy fsprotect configuration from recovery mode               #
+# (single kernel parameter) of grub 2 menu                                                                     #
+################################################################################################################
+# Copyright (C) 2010 Dimitris Diamantis (aka ftso)                                                             #
+# This is free software. You may redistribute copies of it under the terms of                                  #
+# the GNU General Public License <http://www.gnu.org/licenses/gpl.html>                                        #
+# There is *NO WARRANTY*, to the extent permitted by law.                                                      #
+################################################################################################################
+# Depends on:'fsprotect (version 1.0.5 or above)', 'grub-pc (version ~2 or above)', 'whiptail', 'libnotify-bin'#
+# Installation:Just copy to '/usr/share/recovery-mode/options/' directory and make it executable.              #
+# Run:Select the 'recovery mode' and then 'Protect the file system'.                                           #
+################################################################################################################
+
+
+
+# Start...
+
+
+
+# recovery menu
+. /usr/share/recovery-mode/l10n.sh
+
+if [ "$1" = "test" ]; then
+
+	echo $(eval_gettext "Protect the file system")
+	exit 0;
+
+fi
+
+
+
+# error function
+er=0
+
+function error(){
+
+	if [ $er -eq 1 ]; then
+
+		whiptail --title "Error" --backtitle "ProtectMyFS" --yesno " You enter something wrong! \nTry again?  " 9 39
+
+		if [ $? -eq 0 ]; then
+
+        		continue
+
+        	else
+
+			whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "Reboot..." 8 30
+			reboot
+			exit 0;
+
+   		fi
+
+	fi
+
+}
+
+
+
+# info_for_nonX functions
+function info_d(){
+
+	rm /tmp/motd.tail.protectmyfs
+	cat /etc/motd.tail | sed 's|File System Protection is ENABLED||g' > /tmp/motd.tail.protectmyfs
+	cp /tmp/motd.tail.protectmyfs /etc/motd.tail
+
+}
+
+
+function info_e(){
+
+	cat /etc/motd.tail | grep Protection
+
+	if [ $? -ne 0 ]; then
+
+		echo 'File System Protection is ENABLED' >> /etc/motd.tail
+
+	fi
+
+}
+
+
+
+# info_for_X functions
+function info_eX(){
+
+	for hu in $(ls /home);  do
+
+   		file /home/$hu/.config/
+
+   		if [ $? -eq 0 ]; then
+
+      			file /home/$hu/.config/autostart
+
+      			if [ $? -ne 0 ]; then
+
+         			mkdir /home/$hu/.config/autostart
+
+      			fi
+
+         		rm /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		touch /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		echo '[Desktop Entry]' >  /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		echo 'Exec=notify-send -t 35000 Warning "File System Protection is ENABLED"' >> /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		echo 'Name=protectmyfsinfo' >> /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		echo 'StartupNotify=false' >> /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		echo 'Type=Application' >> /home/$hu/.config/autostart/protectmyfsinfo.desktop
+         		chmod ugo+rx /home/$hu/.config/autostart/protectmyfsinfo.desktop
+
+   		fi
+
+	done
+
+}
+
+
+function info_dX(){
+
+	for hu2 in $(ls /home);  do
+
+        	file /home/$hu2/.config/autostart/protectmyfsinfo.desktop
+
+        	if [ $? -eq 0 ]; then
+
+                	rm /home/$hu2/.config/autostart/protectmyfsinfo.desktop
+
+        	fi
+
+	done
+
+}
+
+
+
+# save changes function
+nmp=""
+
+function savechanges(){
+
+	whiptail --title "Question" --backtitle "ProtectMyFS" --yesno " Save changes?  " 8 30
+
+	if [ $? -eq 0 ]; then
+
+		nmp=`echo $nmp | sed 's/G/\\\G/g'`
+		cp /etc/default/fsprotect.fsprotectme.bak /etc/default/fsprotect
+                sed "s|^PROTECT.*|PROTECT=\"$nmp\"|g" /etc/default/fsprotect > /tmp/fsprotectme_fsprotect
+                mv /tmp/fsprotectme_fsprotect /etc/default/fsprotect
+                echo Done!
+         	break;
+
+	else
+
+		whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox " Nothing saved  " 8 30
+		break;
+
+	fi
+
+}
+
+
+
+# info message
+whiptail --scrolltext --title "Info" --backtitle "ProtectMyFS" --msgbox " #################################\
+#############################\nProtectmyfs (shell script for easy fsprotect configuration)\n################\
+##############################################\n\nWhen you enable the file system protection...\nFilesystems \
+will be protected and no change is ever written to\nthe disk (Warning: POP3 emails, database changes, bookmarks\
+\netc will be lost after reboot). Protected filesystems will be\nmounted read-only. This means that they will \
+not be damaged\nwhen the computer will be turned off improperly. Filesystem\nchanges cannot be more than a \
+predefined limit that you will\nset. If you don't set the limits, the default limit 0.5G \nwill be setted on \
+every filesystem. The protection of the ROOT\nfilesystem is obligatory.\nIf you want to disable the file system \
+protection just select\nProtect the file system from the menu again. \n\nPress TAB and then Enter to continue..." 17 69
+
+
+
+# check fsprotect version
+dpkg -s fsprotect | grep -A 1 "Package" && dpkg -s libnotify1 | grep -A 1 "Package" && dpkg -s grub-pc | grep -A 1 "Package:"
+
+if [ $? -ne 0 ]; then
+
+	whiptail --title "Error" --backtitle "ProtectMyFS" --msgbox "  Depedencies error! \n Reboot..." 7 40
+	reboot
+
+fi
+
+
+
+# check vistual memory
+vm=$(free -gt | tail -1 | awk '{print $2}')
+
+if [ $vm -lt 2 ]; then
+
+	whiptail --title "Error" --backtitle "ProtectMyFS" --msgbox " You must have more Virtual memory to enable file system protection!\
+ \nGive at least 2G more for Swapping and try again. \nReboot..." 12 75
+	reboot
+
+fi
+
+
+
+# check grub2 config file
+file /etc/default/grub
+
+if [ $? -ne 0 ]; then
+
+	whiptail --title "Error" --backtitle "ProtectMyFS" --msgbox "Grub 2 config file not found! Reboot..." 7 47
+	reboot
+
+fi
+
+
+
+# check fsprotect config file
+clear
+file /etc/default/fsprotect
+
+if [ $? -ne 0 ]; then
+
+	whiptail --title "Error" --backtitle "ProtectMyFS" --msgbox "Fsprotect config file not found! Reboot..." 7 47
+	reboot
+
+fi
+
+
+
+# check motd.tail file
+clear
+file /etc/motd.tail
+
+if [ $? -ne 0 ]; then
+
+	touch /etc/motd.tail
+
+fi
+
+
+
+# back up configuration files
+clear
+file /etc/default/fsprotect.fsprotectme.bak && file /etc/default/grub.fsprotectme.bak
+
+if [ $? -ne 0 ]; then
+
+	clear
+	echo -e "\n...back up the default configuration files"
+	cp /etc/default/fsprotect /etc/default/fsprotect.fsprotectme.bak
+	echo 'Done: /etc/default/fsprotect.fsprotectme.bak'
+	cp /etc/default/grub /etc/default/grub.fsprotectme.bak
+	echo 'Done: /etc/default/grub.fsprotectme.bak'
+	echo -e "\033[1m Press Enter to continue...\033[0m"
+	read enter
+
+fi
+
+brg=0
+file /etc/default/burg
+
+if [ $? -eq 0 ]; then
+
+	brg=1
+	file /etc/default/burg.fsprotectme.bak
+
+	if [ $? -ne 0 ]; then
+
+		cp /etc/default/burg /etc/default/burg.fsprotectme.bak
+
+	fi
+
+fi
+
+
+# check if fsprotect is enabled
+clear
+recon=0
+enab=`grep fsprotect /etc/default/grub`
+
+if [  ! -z  "$enab" ]; then
+
+	stat2=$(cat /etc/default/grub | grep fsprotect | sed 's/^.*fsprotect=//g' | sed 's/ .*//g')
+	stat1=$(cat /etc/default/fsprotect | grep ^PROTECT | sed 's/PROTECT=//g' | sed 's/""//g')
+
+	if [ -z "$stat1" ]; then
+
+		whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is enabled! \n \
+The maximum virtual changes on the ROOT filesystem are: $stat2 " 18 75
+
+	else
+
+		whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is enabled! \n \
+The maximum virtual changes on the ROOT filesystem are: $stat2 \n Other mountpoints of filesystems that you protect are: \n $stat1" 20 75
+
+	fi
+
+	whiptail --title "Question" --backtitle "ProtectMyFS" --yesno "Do you want to reconfigure?" 10 35
+
+   	if [ $? -eq 0 ]; then
+
+		clear
+		recon=1
+
+	else
+
+		whiptail --title "Question" --backtitle "ProtectMyFS" --yesno "  Filesystem protection is enabled! \n Do you want to disable?" 10 43
+
+		if [ $? -eq 0 ]; then
+
+			echo -e "\nDisabling system protection..."
+			cp /etc/default/fsprotect.fsprotectme.bak /etc/default/fsprotect
+			cp /etc/default/grub.fsprotectme.bak /etc/default/grub
+			update-grub
+
+			if [ $brg -eq 1 ]; then
+
+				cp /etc/default/burg.fsprotectme.bak /etc/default/burg
+				update-burg
+
+			fi
+
+			whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is disabled! \n Reboot..." 10 46
+ 			info_d
+ 			info_dX
+			reboot
+
+		else
+
+			whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is not disabled! \n Reboot..." 10 46
+			reboot
+
+		fi
+
+	fi
+
+fi
+
+
+
+
+# auto configure
+vm=$(free -gt | tail -1 | awk '{print $2}')
+let vmauto=$vm-1
+mponts="/ `df | grep /dev/sd | awk '{print $6}' | grep -v /$`"
+mpontsc=`echo $mponts | wc -w`
+rm /tmp/protectmyfs.mpont 2> /dev/null
+let gauto=$mpontsc+$vmauto
+gauto2=$gauto
+
+for ((tauto=0; tauto<=$gauto2; tauto++));  do
+
+	for iauto in $mponts;  do
+
+		if [ $gauto -gt 0 ]; then
+
+			echo "$iauto="$tauto"G" >> /tmp/protectmyfs.mpont
+
+		fi
+
+		let gauto=$gauto-1
+
+	done
+
+done
+
+automa=0
+autofinal=`cat /tmp/protectmyfs.mpont | tail -"$mpontsc" | sed 's/=0G//g' | sort`
+whiptail --scrolltext --title "Auto Configuration" --backtitle "ProtectMyFS" --yesno "Auto generated full system protection scheme:\n$autofinal  \n\n\
+ Press <Yes> to use this scheme OR <No> for manual configuration\n Use TAB for navigation and Enter for selection... " 16 76
+
+if [ $? -eq 0 ]; then
+
+	automa=1
+	let mpontsc2=$mpontsc-1
+	avm=`cat /tmp/protectmyfs.mpont | tail -"$mpontsc" | sed 's/=0G//g' | sort | head -1 | sed 's/[^0-9]//g'`
+	nmp=`cat /tmp/protectmyfs.mpont | tail -"$mpontsc" | sed 's/=0G//g' | sort | tail -"$mpontsc2"`
+	echo $nmp
+	savechanges
+
+fi
+
+
+
+# select the mountpoints
+while true;  do
+
+	clear
+
+	if [ $automa -eq 1 ]; then
+
+		break;
+
+	fi
+
+	er=0
+	vm=$(free -gt | tail -1 | awk '{print $2}')
+	let gvm=vm-1
+	avm=$(whiptail --title "Virtual Memory" --backtitle "ProtectMyFS" --inputbox --nocancel " Your system has $vm Gigabytes\
+	virtual memory.\nYou should use $gvm Gigabytes maximum for virtual changes. \n\nEnter the number of Gigabytes of maximum\
+	virtual changes\nthat can be done on the ROOT mountpoint (at least 1):\n" 13 68 3>&1 1>&2 2>&3)
+
+	if [ -z "$avm" ]; then
+
+		er=1
+		error
+
+	fi
+
+	if [[ "$avm" == *[^0-9]* ]]; then
+
+		er=1
+		error
+
+	else
+
+   		if [[ $avm -gt $gvm ]]; then
+
+			er=1
+			error
+
+		fi
+
+	fi
+
+	let gvm2=$gvm-$avm
+	mtnp=`df | grep /dev/sd | awk '{print $6}' | grep -v /$ | grep / -n`
+	nmp=$(whiptail --title "Mountpoints" --backtitle "ProtectMyFS" --inputbox --nocancel " Mountpoints:\
+                                                                     $mtnp \n\nEnter zero or more mountpoints,\
+ with or without (default 0.5G) Gigabytes of virtual\nchanges, that you want to protect separated by a space\
+ (eg: /home=2G /var/tmp)\nYou have $gvm2 Gigabytes to divide on mountpoints: \n\n " 15 92 3>&1 1>&2 2>&3)
+
+	if [ -z "$nmp" ]; then
+
+		cp /etc/default/fsprotect.fsprotectme.bak /etc/default/fsprotect
+		break;
+
+	else
+
+		varc=$(echo $nmp | wc -w)
+		counter=0
+		varctnt=0
+
+		while [  $counter -lt $varc ];  do
+
+			let counter=counter+1
+			varct=$(echo $nmp | awk -v counter=$counter '{print $counter}')
+			varctm=$(echo $varct | awk 'BEGIN { FS="=" } ; {print $1}')
+			varctp=$(echo $varct | awk 'BEGIN { FS="=" } ; {print $2}' | sed 's/[0-9]*//')
+			varctn=$(echo $varct | awk 'BEGIN { FS="=" } ; {print $2}' | sed 's/[A-Za-z]*//g')
+
+			if [[ -z "$varctp" && -z "$varctn" ]]; then
+
+				varctp=G
+				varctn=0
+
+			fi
+
+ 			if [[ -z "$varctp" || -z "$varctn" ]]; then
+
+				er=1
+				break;
+
+			fi
+
+			if ( mountpoint $varctm ) && [ $varctn -gt -1 ] && [ $varctp == "G" ] ; then
+
+				let varctnt=$varctnt+$varctn
+
+			else
+
+				er=1
+				break;
+
+			fi
+
+			if [ $varctnt -gt $gvm2 ]; then
+
+				er=1
+				break;
+
+			fi
+
+		done
+	error
+	savechanges
+
+	fi
+
+done
+
+
+
+# enable protection
+whiptail --title "Question" --backtitle "ProtectMyFS" --yesno " Enable filesystem protection?  " 9 40
+if [ $? -eq 0 ]; then
+
+	vm=$(free -gt | tail -1 | awk '{print $2}')
+	echo -e "\nEnabling system protection..."
+	params=`grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub | sed 's|GRUB_CMDLINE_LINUX_DEFAULT="| |g'`
+	sed "s|^GRUB_CMDLINE_LINUX_DEFAULT.*|GRUB_CMDLINE_LINUX_DEFAULT=\"fsprotect="$avm"G$params|g" /etc/default/grub > /tmp/fsprotectme_grub
+	mv /tmp/fsprotectme_grub /etc/default/grub
+	update-grub
+
+	if [ $brg -eq 1 ]; then
+
+		paramsb=`grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/burg | sed 's|GRUB_CMDLINE_LINUX_DEFAULT="| |g'`
+		sed "s|^GRUB_CMDLINE_LINUX_DEFAULT.*|GRUB_CMDLINE_LINUX_DEFAULT=\"fsprotect="$avm"G$paramsb|g" /etc/default/burg > /tmp/fsprotectme_burg
+		mv /tmp/fsprotectme_burg /etc/default/burg
+		update-burg
+
+	fi
+
+	whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is enabled! \n Reboot..." 10 46
+	info_e
+	info_eX
+	reboot
+
+else
+
+	if [ "$recon" = "1" ]; then
+
+		whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is still enabled! \n Reboot..." 10 49
+
+	else
+
+		whiptail --title "Info" --backtitle "ProtectMyFS" --msgbox "  Filesystem protection is not enabled! \n Reboot..." 10 46
+
+	fi
+	reboot
+
+fi
+
+
+
+exit 0;
+
+
+### ...Finito!
